@@ -1,0 +1,139 @@
+import { useState, useCallback, useRef, useEffect } from 'react'
+import * as THREE from 'three'
+import { useThree } from '@react-three/fiber'
+import { ThreeElementEvent } from '@react-three/fiber'
+
+interface Use3DInteractionProps{
+  enabled?: boolean
+  loggingEnabled?: boolean
+  screenReaderEnabled?: boolean
+  keyboardControlsEnabled?: boolean
+}
+
+interface InteractionContextValue{
+  isHovered: boolean
+  isSelected: boolean
+  enable: () => void
+  disable: () => void
+  setHovered: (hovered: boolean) => void
+  setSelected: (selected: boolean) => void
+  onClick: (event: ThreeElementEvent) => void
+  onPointerOver: (event: ThreeElementEvent) => void
+  onPointerOut: (event: ThreeElementEvent) => void
+  onKeyDown?: (event: KeyboardEvent) => void
+  onKeyUp?: (event: KeyboardEvent) => void
+}
+
+function use3DInteraction({
+  enabled = true,
+  loggingEnabled = false,
+  screenReaderEnabled = false,
+  keyboardControlsEnabled = false
+}: Use3DInteractionProps = {}): InteractionContextValue {
+  const [isHovered, setIsHovered] = useState(false)
+  const [isSelected, setIsSelected] = useState(false)
+  const { scene, camera, gl } = useThree()
+  const raycaster = useRef(new THREE.Raycaster())
+  const pointer = useRef(new THREE.Vector2())
+  const preventClick = useRef(false)
+  const keyboardRotationSpeed = 0.01
+  const keyboardZoomSpeed = 0.1
+
+  const enable = useCallback(() => {
+    if (loggingEnabled) {
+      console.log('3D Interaction Enabled')
+    }
+  }, [loggingEnabled])
+
+  const disable = useCallback(() => {
+    setIsHovered(false)
+    setIsSelected(false)
+    document.body.style.cursor = 'auto'
+    if (loggingEnabled) {
+      console.log('3D Interaction Disabled')
+    }
+  }, [loggingEnabled])
+
+  const setHovered = useCallback((hovered: boolean) => {
+    setIsHovered(hovered)
+  }, [])
+
+  const setSelected = useCallback((selected: boolean) => {
+    setIsSelected(selected)
+  }, [])
+
+  const onClick = useCallback((event: ThreeElementEvent) => {
+    if (!enabled || preventClick.current) return
+    setSelected(!isSelected)
+    if (loggingEnabled) {
+      console.log('3D Object Clicked', event.object)
+    }
+  }, [enabled, isSelected, loggingEnabled])
+
+  const onPointerOver = useCallback((event: ThreeElementEvent) => {
+    if (!enabled) return
+    setIsHovered(true)
+    document.body.style.cursor = 'pointer'
+    if (loggingEnabled) {
+      console.log('3D Object Hovered', event.object)
+    }
+  }, [enabled, loggingEnabled])
+
+  const onPointerOut = useCallback((event: ThreeElementEvent) => {
+    setIsHovered(false)
+    document.body.style.cursor = 'auto'
+    if (loggingEnabled) {
+      console.log('3D Object Unhovered', event.object)
+    }
+  }, [loggingEnabled])
+
+  const onKeyDown = useCallback((event: KeyboardEvent) => {
+    if (!enabled || !keyboardControlsEnabled) return
+    switch (event.key) {
+      case 'ArrowLeft':
+        camera.position.x -= keyboardRotationSpeed
+        break
+      case 'ArrowRight':
+        camera.position.x += keyboardRotationSpeed
+        break
+      case 'ArrowUp':
+        camera.position.y += keyboardRotationSpeed
+        break
+      case 'ArrowDown':
+        camera.position.y -= keyboardRotationSpeed
+        break
+      case '+':
+        camera.position.z -= keyboardZoomSpeed
+        break
+      case '-':
+        camera.position.z += keyboardZoomSpeed
+        break
+      default:
+        break
+    }
+  }, [enabled, keyboardControlsEnabled, camera.position, keyboardRotationSpeed, keyboardZoomSpeed])
+
+  useEffect(() => {
+    if (keyboardControlsEnabled) {
+      document.addEventListener('keydown', onKeyDown)
+    }
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [keyboardControlsEnabled, onKeyDown])
+
+  return {
+    isHovered,
+    isSelected,
+    enable,
+    disable,
+    setHovered,
+    setSelected,
+    onClick,
+    onPointerOver,
+    onPointerOut,
+    onKeyDown
+  }
+}
+
+export default use3DInteraction
