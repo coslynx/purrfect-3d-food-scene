@@ -1,0 +1,140 @@
+import { useFrame, useThree } from '@react-three/fiber'
+import { Bloom, DepthOfField, EffectComposer, SSAO } from '@react-three/drei'
+import * as THREE from 'three'
+import { useMemo, useCallback, useEffect, useRef, useState } from 'react'
+import { Power2, Power3, gsap } from 'gsap'
+import { useTheme } from '../context/ThemeContext'
+import { three3DHelpersUtil } from '../utils/three-helpers'
+import type { ThreeDComponentProps } from '../types'
+
+interface KibbleExplosionProps extends ThreeDComponentProps {
+  position?: [number, number, number]
+  scale?: number
+  ingredients?: { name: string; color: string }[]
+}
+
+const KibbleExplosion: React.FC<KibbleExplosionProps> = ({
+  position = [0, 0, 0],
+  scale = 1,
+  ingredients = [],
+  ...props
+}) => {
+  const kibbleCount = 20
+  const explosionRadius = 5
+  const explosionDuration = 2
+  const kibbleColor = '#D2B48C'
+  const highlightBloomIntensity = 0.7
+
+  const { scene, gl, camera, performance } = useThree()
+  const { isDarkMode } = useTheme()
+  const groupRef = useRef<THREE.Group>(null)
+  const kibblePieces = useMemo(() => {
+    const pieces = []
+    for (let i = 0; i < kibbleCount; i++) {
+      pieces.push({
+        id: i,
+        x: (Math.random() - 0.5) * 2,
+        y: (Math.random() - 0.5) * 2,
+        z: (Math.random() - 0.5) * 2,
+        rx: Math.random() * Math.PI,
+        ry: Math.random() * Math.PI,
+        rz: Math.random() * Math.PI,
+        s: 0.5 + Math.random() * 0.5
+      })
+    }
+    return pieces
+  }, [])
+
+  useEffect(() => {
+    if (!groupRef.current) return
+
+    const tl = gsap.timeline({ repeat: -1, yoyo: true })
+
+    kibblePieces.forEach((piece, i) => {
+      const targetPosition = {
+        x: piece.x * explosionRadius,
+        y: piece.y * explosionRadius,
+        z: piece.z * explosionRadius
+      }
+      tl.to(
+        groupRef.current?.children[i].position,
+        {
+          x: targetPosition.x,
+          y: targetPosition.y,
+          z: targetPosition.z,
+          duration: explosionDuration,
+          ease: Power2.easeOut,
+          delay: Math.random() * 0.2
+        },
+        0
+      )
+        .to(
+          groupRef.current?.children[i].rotation,
+          {
+            x: piece.rx,
+            y: piece.ry,
+            z: piece.rz,
+            duration: explosionDuration,
+            ease: Power2.easeOut,
+            delay: Math.random() * 0.2
+          },
+          0
+        )
+        .to(
+          groupRef.current?.children[i].scale,
+          {
+            x: piece.s,
+            y: piece.s,
+            z: piece.s,
+            duration: explosionDuration,
+            ease: Power2.easeOut,
+            delay: Math.random() * 0.2
+          },
+          0
+        )
+    })
+    tl.pause()
+
+    // Start on scroll
+    let mm = gsap.matchMedia()
+    mm.add('(min-width: 0px)', () => {
+      gsap.to(tl, {
+        timeScale: 1,
+        scrollTrigger: {
+          scroller: window,
+          trigger: groupRef.current,
+          start: 'top bottom',
+          end: 'bottom top',
+          markers: false,
+          scrub: 0.1
+        }
+      })
+    })
+
+    // Start if there is no ScrollTrigger
+    if (gsap.version().length < 1) tl.resume()
+
+    return () => {
+      tl.kill()
+    }
+  }, [explosionDuration, explosionRadius, kibblePieces])
+
+  return (
+    <group ref={groupRef} position={position} scale={scale} {...props}>
+      {kibblePieces.map((piece) => (
+        <mesh key={piece.id} position={[0, 0, 0]} scale={[0, 0, 0]} castShadow receiveShadow>
+          <boxGeometry args={[0.5, 0.5, 0.5]} />
+          <meshStandardMaterial color={kibbleColor} roughness={0.7} metalness={0.1} />
+        </mesh>
+      ))}
+      {ingredients.map((ingredient, index) => (
+        <mesh key={index} position={[0, 0, 0]} scale={[0, 0, 0]}>
+          <sphereGeometry args={[0.3, 32, 32]} />
+          <meshStandardMaterial color={ingredient.color} emissive={ingredient.color} emissiveIntensity={highlightBloomIntensity} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
+export default KibbleExplosion
