@@ -1,0 +1,39 @@
+<structure>
+/**
+ * @file src/hooks/use3DInteraction.ts
+ * @description Custom hook for handling 3D interactions, managing camera and object manipulation.
+ */
+import {useState, useRef, useCallback} from 'react';
+import * as THREE from 'three';
+import {useThree} from '@react-three/fiber';
+import {useReflector} from '@react-three/drei';
+import type {Intersection} from 'three';
+interface Use3DInteraction {enable: () => void;disable: () => void;setHovered: (hovered: boolean) => void;setSelected: (selected: boolean) => void;}
+/**
+ * Provides a custom hook to manage the interactions and perspective within ThreeJs
+ * @returns {Use3DInteraction} The interaction methods
+ */
+const use3DInteraction = (): Use3DInteraction => {
+const {scene, camera, pointer, raycaster, size} = useThree();
+const [hovered, setHovered] = useState(false);
+const [selected, setSelected] = useState(false);
+const [enabled, setEnabled] = useState(false);
+const enable = useCallback(() => {setEnabled(true);}, []);
+const disable = useCallback(() => {setEnabled(false);setHovered(false);setSelected(false);document.body.style.cursor = 'auto';}, []);
+useReflector(size.width, size.height);
+const domElement = useMemo(() => {
+return (scene?.children[0] as any)?.gl?.domElement;
+}, [scene]);
+useFrame(() => {
+if (!enabled || !domElement || !camera) return;
+raycaster.setFromCamera(pointer, camera);
+const intersects = raycaster.intersectObjects(scene.children, true) as Intersection[];
+if (intersects.length > 0) {
+document.body.style.cursor = 'pointer';
+} else {
+document.body.style.cursor = 'auto';
+}
+});
+return {enable, disable, setHovered: (h: boolean) => setHovered(h), setSelected: (s: boolean) => setSelected(s)};
+};
+export default use3DInteraction;
