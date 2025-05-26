@@ -1,0 +1,232 @@
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import * as THREE from 'three'
+import { useFrame, useThree } from '@react-three/fiber'
+import { useTheme } from '../context/ThemeContext'
+import { three3DHelpersUtil } from '../utils/three-helpers'
+import type { HookOptions, HookReturnType, ResourceType } from '../types'
+
+export function use3DAnimation<T extends ResourceType>({
+  initialValue,
+  threshold = 0.5,
+  duration = 1000,
+  autoInit = true,
+  dependencies = [],
+  onComplete,
+  onError
+}: HookOptions<T>): HookReturnType<T> {
+  const { isDarkMode } = useTheme()
+  const { performance, camera, scene, gl } = useThree()
+  const [state, setState] = useState<T>(initialValue as T)
+  const [isActive, setIsActive] = useState<boolean>(false)
+  const [error, setError] = useState<Error | null>(null)
+  const [progress, setProgress] = useState<number>(0)
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const resourceRef = useRef<THREE.Object3D | null>(null)
+  const mixerRef = useRef<THREE.AnimationMixer | null>(null)
+  const animationActions = useRef<{[key:string]:THREE.AnimationAction}>({})
+  const configRef = useRef({
+    threshold,
+    duration,
+    lastUpdated: Date.now()
+  })
+
+  useEffect(() => {
+    configRef.current = {
+      threshold,
+      duration,
+      lastUpdated: Date.now()
+    }
+  }, [threshold, duration])
+
+  const optimizedPerformance = useMemo(() => {
+    const performanceValue = performance?.current || 1
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+
+    return {
+      quality: isMobile ? 'low' : performanceValue > 0.8 ? 'high' : 'medium',
+      frameSkip: isMobile ? 2 : performanceValue < 0.5 ? 1 : 0,
+      adaptiveDuration: duration * (performanceValue < 0.5 ? 1.5 : 1)
+    }
+  }, [performance, duration])
+
+  const initialize = useCallback(() => {
+    try {
+      setIsActive(true)
+      setError(null)
+      setProgress(0)
+
+      const resource = three3DHelpersUtil.createResource<T>(
+        initialValue as T,
+        optimizedPerformance.quality
+      )
+
+      if (resource instanceof THREE.Object3D) {
+        resourceRef.current = resource
+        mixerRef.current = new THREE.AnimationMixer(resource)
+      }
+
+      const progressInterval = setInterval(() => {
+        setProgress(prev => {
+          const newProgress = Math.min(prev + 0.05, 1)
+          if (newProgress >= 1) {
+            clearInterval(progressInterval)
+            setState(resource)
+            setIsActive(false)
+
+            if (onComplete) {
+              onComplete(resource)
+            }
+          }
+          return newProgress
+        })
+      }, optimizedPerformance.adaptiveDuration / 20)
+
+      return () => {
+        clearInterval(progressInterval)
+        mixerRef.current?.stopAllAction()
+        if (resourceRef.current) {
+          three3DHelpersUtil.disposeObject(resourceRef.current)
+          resourceRef.current = null
+        }
+      }
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Unknown error in use3DAnimation')
+      setError(error)
+      setIsActive(false)
+
+      if (onError) {
+        onError(error)
+      }
+
+      return () => {}
+    }
+  }, [initialValue, optimizedPerformance, onComplete, onError])
+
+  useEffect(() => {
+    if (autoInit) {
+      const cleanup = initialize()
+      return cleanup
+    }
+    return () => {}
+  }, [autoInit, initialize, ...dependencies])
+
+  const startAnimation = useCallback((name: string) => {
+    if (!mixerRef.current || !animationActions.current[name]) {
+      console.warn(`Animation "${name}" not found or mixer not initialized`)
+      return
+    }
+    animationActions.current[name].reset().fadeIn(0.5).play()
+  }, [])
+
+  const pauseAnimation = useCallback((name: string) => {
+    if (!mixerRef.current || !animationActions.current[name]) {
+      console.warn(`Animation "${name}" not found or mixer not initialized`)
+      return
+    }
+    animationActions.current[name].fadeOut(0.5)
+  }, [])
+
+  const stopAnimation = useCallback((name: string) => {
+    if (!mixerRef.current || !animationActions.current[name]) {
+      console.warn(`Animation "${name}" not found or mixer not initialized`)
+      return
+    }
+    animationActions.current[name].stop()
+  }, [])
+
+  const setAnimationSpeed = useCallback((name: string, speed:number) => {
+    if (!mixerRef.current || !animationActions.current[name]) {
+      console.warn(`Animation "${name}" not found or mixer not initialized`)
+      return
+    }
+    animationActions.current[name].setEffectiveTimeScale(speed)
+  }, [])
+
+  const setAnimationWeight = useCallback((name: string, weight: number) => {
+    if (!mixerRef.current || !animationActions.current[name]) {
+      console.warn(`Animation "${name}" not found or mixer not initialized`)
+      return
+    }
+    animationActions.current[name].setEffectiveWeight(weight)
+  }, [])
+
+  const doSomething = useCallback((arg: any) => {
+    if (!arg || typeof arg !== 'object') {
+      throw new Error('Invalid argument provided to doSomething')
+    }
+
+    if (error) {
+      console.warn('Operation skipped due to previous error:', error.message)
+      return false
+    }
+
+    try {
+      const now = Date.now()
+      const timeSinceLastUpdate = now - configRef.current.lastUpdated
+
+      if (timeSinceLastUpdate < 16) {
+        return false
+      }
+
+      setState(prevState => {
+        const newState = three3DHelpersUtil.cloneResource(prevState)
+
+        three3DHelpersUtil.transformResource(newState, arg, isDarkMode)
+
+        return newState
+      })
+
+      configRef.current.lastUpdated = now
+      return true
+    } catch (err) {
+      const operationError = err instanceof Error ?
+        err :
+        new Error('Error in doSomething operation')
+
+      setError(operationError)
+
+      if (onError) {
+        onError(operationError)
+      }
+
+      return false
+    }
+  }, [error, onError, isDarkMode])
+
+  const resetState = useCallback(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+      timeoutRef.current = null
+    }
+
+    setState(initialValue as T)
+    setError(null)
+    setProgress(0)
+    setIsActive(false)
+
+    if (resourceRef.current) {
+      three3DHelpersUtil.disposeObject(resourceRef.current)
+      resourceRef.current = null
+    }
+  }, [initialValue])
+
+  useFrame((clock, delta) => {
+        mixerRef.current?.update(delta)
+  })
+
+  return {
+    state,
+    isActive,
+    error,
+    progress,
+    quality: optimizedPerformance.quality,
+    doSomething,
+    resetState,
+    initialize,
+    startAnimation,
+    pauseAnimation,
+    stopAnimation,
+    setAnimationSpeed,
+    setAnimationWeight
+  }
+}
