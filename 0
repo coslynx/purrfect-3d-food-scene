@@ -1,0 +1,33 @@
+import { useState, useCallback } from 'react'
+
+type UseToggleType = (
+  initialValue?: boolean
+) => [boolean, () => void]
+
+/**
+ * Custom hook for managing a boolean toggle state.
+ *
+ * This hook encapsulates the logic for toggling a boolean value
+ * and provides a convenient way to manage state in functional components.
+ *
+ * @param initialValue - The initial boolean value (optional, defaults to false).
+ * @returns A tuple containing:
+ *   - The current boolean value.
+ *   - A function to toggle the boolean value.
+ *
+ * @example
+ * const [isOn, toggleIsOn] = useToggle(true);
+ */
+const useToggle: UseToggleType = (initialValue = false) => {
+  // Use useState to manage the boolean value
+  const [value, setValue] = useState<boolean>(initialValue)
+
+  // Define the toggle function using useCallback
+  const toggle = useCallback(() => {
+    setValue((currentValue) => !currentValue)
+  }, [])
+
+  return [value, toggle]
+}
+
+export { useToggle }
