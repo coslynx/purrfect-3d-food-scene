@@ -1,0 +1,121 @@
+import React, { useMemo } from 'react';
+import * as THREE from 'three';
+import { useThree } from '@react-three/fiber';
+import { AdaptiveDpr, Environment as EnvironmentDrei } from '@react-three/drei';
+import { useTheme } from '../../context/ThemeContext';
+import { three3DHelpersUtil } from '../../utils/three-helpers';
+import type { ThreeDComponentProps } from '../../types';
+
+export interface EnvironmentProps extends ThreeDComponentProps {
+  ambientIntensity?: number;
+  directionalIntensity?: number;
+  directionalColor?: THREE.ColorRepresentation;
+  directionalPosition?: [number, number, number];
+  backgroundColor?: THREE.ColorRepresentation;
+  fogNear?: number | null;
+  fogFar?: number | null;
+  fogColor?: THREE.ColorRepresentation;
+  enableEnvironmentMap?: boolean;
+  environmentMapIntensity?: number;
+  environmentMapPath?: string | null;
+  skyboxTexturePath?: string | null;
+}
+
+const Environment: React.FC<EnvironmentProps> = ({
+  ambientIntensity = 0.3,
+  directionalIntensity = 0.8,
+  directionalColor = '#ffffff',
+  directionalPosition = [1, 1, 1],
+  backgroundColor = '#ffffff',
+  fogNear = 10,
+  fogFar = 50,
+  fogColor = '#ffffff',
+  enableEnvironmentMap = false,
+  environmentMapIntensity = 1,
+  environmentMapPath = null,
+  skyboxTexturePath = null,
+}) => {
+  const { scene, gl, isMobile, performance } = useThree();
+  const { isDarkMode } = useTheme();
+
+  const envMap = useMemo(() => {
+    if (enableEnvironmentMap && environmentMapPath) {
+      try {
+        return three3DHelpersUtil.createEnvironmentMap(environmentMapPath, gl.renderer);
+      } catch (error) {
+        console.error("Error loading environment map", error);
+        return null;
+      }
+    }
+    return null;
+  }, [enableEnvironmentMap, environmentMapPath, gl.renderer]);
+
+  const skyboxTexture = useMemo(() => {
+    if (skyboxTexturePath) {
+      try{
+        const textureLoader = new THREE.CubeTextureLoader();
+        textureLoader.setPath( skyboxTexturePath );
+        const texture = textureLoader.load( [
+          'px.png', 'nx.png',
+          'py.png', 'ny.png',
+          'pz.png', 'nz.png'
+        ] );
+        return texture;
+      } catch (error) {
+        console.error("Error loading skybox texture", error);
+        return null;
+      }
+    }
+    return null;
+  }, [skyboxTexturePath]);
+
+  const optimizedFog = useMemo(() => {
+    if (isMobile || performance.current < 0.5) {
+      return null;
+    }
+    return {
+      fogNear: fogNear,
+      fogFar: fogFar,
+      fogColor: fogColor
+    }
+  },[fogFar, fogNear, fogColor, isMobile, performance.current]);
+
+  return (
+    <>
+      <AdaptiveDpr pixelated />
+      <color attach="background" args={[backgroundColor]} />
+      <ambientLight intensity={ambientIntensity} />
+      <directionalLight
+        intensity={directionalIntensity}
+        color={directionalColor}
+        position={directionalPosition}
+        castShadow
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
+        shadow-camera-near={0.1}
+        shadow-camera-far={50}
+        shadow-bias={-0.001}
+      />
+      {optimizedFog && (
+        <fog attach="fog" args={[optimizedFog.fogColor, optimizedFog.fogNear, optimizedFog.fogFar]} />
+      )}
+      {enableEnvironmentMap && envMap && (
+        <EnvironmentDrei
+          background
+          intensity={environmentMapIntensity}
+          environmentMap={envMap}
+        />
+      )}
+      {skyboxTexture && (
+          <scene attach="background" >
+              <mesh>
+                  <boxGeometry attach="geometry" args={[500, 500, 500]} />
+                  <meshBasicMaterial attach="material" side={THREE.BackSide} map={skyboxTexture} />
+              </mesh>
+          </scene>
+      )}
+    </>
+  );
+};
+
+export default Environment;
