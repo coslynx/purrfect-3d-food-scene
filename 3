@@ -1,0 +1,109 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
+import * as THREE from 'three'
+import { useThree } from '@react-three/fiber'
+import { useTheme } from '../context/ThemeContext'
+import type { ThreeEvent } from '@react-three/fiber'
+interface InteractionHookOptions {
+    onHover?: (intersect: THREE.Intersection | null) => void
+    onClick?: (intersect: THREE.Intersection | null) => void
+    onDrag?: (intersect: THREE.Intersection | null) => void
+}
+interface InteractionResult {
+    enable: () => void
+    disable: () => void
+    setHovered: (object: THREE.Object3D | null) => void
+    setSelected: (object: THREE.Object3D | null) => void
+}
+const use3DInteraction = (): InteractionResult => {
+    const { scene, camera, gl } = useThree()
+    const { isDarkMode } = useTheme()
+    const [hovered, setHoveredInternal] = useState<THREE.Object3D | null>(null)
+    const [selected, setSelectedInternal] = useState<THREE.Object3D | null>(null)
+    const isEnabled = useRef(false)
+    const raycaster = useRef(new THREE.Raycaster())
+    const mouse = useRef(new THREE.Vector2())
+    const touchStart = useRef({ x: 0, y: 0 })
+    const handleIntersection = useCallback((event: MouseEvent | TouchEvent): THREE.Intersection[] => {
+        if (event instanceof MouseEvent) {
+            mouse.current.x = (event.clientX / window.innerWidth) * 2 - 1
+            mouse.current.y = -(event.clientY / window.innerHeight) * 2 + 1
+        } else if (event instanceof TouchEvent) {
+            if (event.touches.length > 0) {
+                touchStart.current = {
+                    x: event.touches[0].clientX,
+                    y: event.touches[0].clientY,
+                }
+                mouse.current.x = (touchStart.current.x / window.innerWidth) * 2 - 1
+                mouse.current.y = -(touchStart.current.y / window.innerHeight) * 2 + 1
+            }
+        }
+        raycaster.current.setFromCamera(mouse.current, camera)
+        return raycaster.current.intersectObjects(scene.children, true)
+    }, [camera, scene])
+    const handleMouseMove = useCallback((event: MouseEvent) => {
+        if (!isEnabled.current) return
+        const intersects = handleIntersection(event)
+        if (intersects.length > 0) {
+            const intersectedObject = intersects[0].object
+            document.body.style.cursor = 'pointer'
+            setHoveredInternal(intersectedObject)
+        } else {
+            document.body.style.cursor = 'auto'
+            setHoveredInternal(null)
+        }
+    }, [handleIntersection])
+    const handleClick = useCallback((event: MouseEvent) => {
+        if (!isEnabled.current) return
+        const intersects = handleIntersection(event)
+        if (intersects.length > 0) {
+            const intersectedObject = intersects[0].object
+            setSelectedInternal(intersectedObject)
+        } else {
+            setSelectedInternal(null)
+        }
+    }, [handleIntersection])
+    const handleTouchStart = useCallback((event: TouchEvent) => {
+        if (!isEnabled.current) return
+        const intersects = handleIntersection(event)
+        if (intersects.length > 0) {
+            const intersectedObject = intersects[0].object
+            setHoveredInternal(intersectedObject)
+        } else {
+            setHoveredInternal(null)
+        }
+    }, [handleIntersection])
+    const enable = useCallback(() => {
+        if (isEnabled.current) return
+        window.addEventListener('mousemove', handleMouseMove)
+        window.addEventListener('click', handleClick)
+        window.addEventListener('touchstart', handleTouchStart)
+        isEnabled.current = true
+    }, [handleMouseMove, handleClick, handleTouchStart])
+    const disable = useCallback(() => {
+        if (!isEnabled.current) return
+        window.removeEventListener('mousemove', handleMouseMove)
+        window.removeEventListener('click', handleClick)
+        window.removeEventListener('touchstart', handleTouchStart)
+        document.body.style.cursor = 'auto'
+        isEnabled.current = false
+    }, [handleMouseMove, handleClick, handleTouchStart])
+    const setHovered = useCallback((object: THREE.Object3D | null) => {
+        setHoveredInternal(object)
+    }, [])
+    const setSelected = useCallback((object: THREE.Object3D | null) => {
+        setSelectedInternal(object)
+    }, [])
+    useEffect(() => {
+        enable()
+        return () => {
+            disable()
+        }
+    }, [enable, disable])
+    return {
+        enable,
+        disable,
+        setHovered,
+        setSelected,
+    }
+}
+export default use3DInteraction
