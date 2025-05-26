@@ -1,0 +1,71 @@
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import * as THREE from 'three';
+import { useThree, useFrame } from '@react-three/fiber';
+import { useLoader } from '@react-three/drei';
+
+interface EnvironmentMapOptions {
+  path: string;
+  intensity?: number;
+  resolution?: number;
+  blur?: number;
+  environmentMapRotation?: boolean;
+}
+
+export const useEnvironmentMap = ({
+  path,
+  intensity = 1,
+  resolution = 256,
+  blur = 0,
+  environmentMapRotation = false,
+}: EnvironmentMapOptions) => {
+  const [environmentMap, setEnvironmentMap] = useState<THREE.Texture | null>(null);
+  const { gl } = useThree();
+  const texture = useLoader(THREE.TextureLoader, path);
+
+  useEffect(() => {
+    let pmremGenerator: THREE.PMREMGenerator;
+    let hdriTexture: THREE.Texture;
+
+    const loadEnvironmentMap = async () => {
+      try {
+        pmremGenerator = new THREE.PMREMGenerator(gl);
+        pmremGenerator.compileEquirectangularShader();
+        hdriTexture = texture;
+        hdriTexture.mapping = THREE.EquirectangularReflectionMapping;
+
+        const pmremTarget = pmremGenerator.fromEquirectangular(hdriTexture);
+        const envMap = pmremTarget.texture;
+
+        setEnvironmentMap(envMap);
+        pmremGenerator.dispose();
+        hdriTexture.dispose();
+        pmremTarget.dispose();
+      } catch (error: any) {
+        console.error('Error loading environment map:', error.message);
+        setEnvironmentMap(null);
+      }
+    };
+
+    loadEnvironmentMap();
+
+    return () => {
+      if (environmentMap) {
+        environmentMap.dispose();
+      }
+      if (pmremGenerator) {
+          pmremGenerator.dispose();
+      }
+      if (hdriTexture) {
+          hdriTexture.dispose();
+      }
+    };
+  }, [gl, path, texture, blur, resolution]);
+
+    useFrame(({scene, clock}) => {
+        if (environmentMap && environmentMapRotation) {
+            scene.rotation.y = Math.sin(clock.getElapsedTime() / 4) * 0.1;
+        }
+    });
+
+  return environmentMap;
+};
