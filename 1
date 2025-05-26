@@ -1,0 +1,94 @@
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useRef,
+  useMemo,
+  useCallback
+} from 'react';
+import * as THREE from 'three';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { AdaptiveEvents, Environment, useGLTF, useTexture } from '@react-three/drei';
+import { three3DHelpersUtil } from '../../utils/three-helpers';
+import type { ThreeDComponentProps } from '../../types';
+import '../../styles/components/three-scene.css';
+
+interface ThreeSceneContextType {
+  scene: THREE.Scene | null;
+  camera: THREE.Camera | null;
+  renderer: THREE.WebGLRenderer | null;
+}
+const ThreeSceneContext = createContext<ThreeSceneContextType>({
+  scene: null,
+  camera: null,
+  renderer: null,
+});
+export const useThreeScene = () => useContext(ThreeSceneContext);
+interface ThreeSceneProps {
+  cameraPosition?: [number, number, number];
+  children?: React.ReactNode;
+}
+export interface SceneObject {
+  name: string;
+  geometry: THREE.BufferGeometry;
+  material: THREE.Material;
+  position: [number, number, number];
+  rotation: [number, number, number];
+  scale: [number, number, number];
+}
+const ThreeScene: React.FC<ThreeSceneProps> = ({
+  children,
+  cameraPosition = [0, 5, 10],
+}) => {
+  const [scene, setScene] = useState<THREE.Scene | null>(null);
+  const [camera, setCamera] = useState<THREE.Camera | null>(null);
+  const [renderer, setRenderer] = useState<THREE.WebGLRenderer | null>(null);
+  const { gl, size } = useThree();
+  const cameraRef = useRef<THREE.PerspectiveCamera>(null);
+  const ambientLightRef = useRef<THREE.AmbientLight>(null);
+  const directionalLightRef = useRef<THREE.DirectionalLight>(null);
+  useEffect(() => {
+    const newScene = new THREE.Scene();
+    setScene(newScene);
+    const newCamera = new THREE.PerspectiveCamera(75, size.width / size.height, 0.1, 1000);
+    newCamera.position.set(...cameraPosition);
+    setCamera(newCamera);
+    if (ambientLightRef.current === null) {
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+      ambientLightRef.current = ambientLight;
+      newScene.add(ambientLight);
+    }
+    if (directionalLightRef.current === null) {
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+      directionalLight.position.set(5, 5, 5);
+      directionalLight.castShadow = true;
+      newScene.add(directionalLight);
+      directionalLightRef.current = directionalLight;
+    }
+    gl.shadowMap.enabled = true;
+    gl.shadowMap.type = THREE.PCFSoftShadowMap;
+    gl.toneMapping = THREE.ACESFilmicToneMapping;
+    gl.toneMappingExposure = 1;
+    gl.outputEncoding = THREE.sRGBEncoding;
+    setRenderer(gl.renderer);
+  }, [cameraPosition, size.height, size.width, gl]);
+  useFrame(() => {
+    if (cameraRef.current) {
+      cameraRef.current.updateProjectionMatrix();
+    }
+  });
+  const contextValue = useMemo<ThreeSceneContextType>(() => ({
+    scene,
+    camera,
+    renderer
+  }), [scene, camera, renderer]);
+  return (
+    <ThreeSceneContext.Provider value={contextValue}>
+      <AdaptiveEvents limit={1} passive={true} />
+      <perspectiveCamera ref={cameraRef} makeDefault position={cameraPosition} />
+      {children}
+    </ThreeSceneContext.Provider>
+  );
+};
+export default ThreeScene;
