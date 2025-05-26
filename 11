@@ -1,0 +1,172 @@
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import * as THREE from 'three'
+import { useThree } from '@react-three/fiber'
+import { useLoader } from '@react-three/drei'
+import { Font } from 'three/examples/jsm/loaders/FontLoader'
+import { three3DHelpersUtil } from '../utils/three-helpers'
+
+interface Text3DProps {
+  text: string
+  font: string
+  size: number
+  height: number
+  curveSegments: number
+  color: string
+  position: [number, number, number]
+  rotation: [number, number, number]
+  bevelEnabled?: boolean
+  bevelThickness?: number
+  bevelSize?: number
+  bevelOffset?: number
+  bevelSegments?: number
+  animationLoop?: boolean
+  onClick?: (event: THREE.Intersection) => void
+  onPointerOver?: (event: THREE.Intersection) => void
+  onPointerOut?: (event: THREE.Intersection) => void
+  castShadow?: boolean
+  receiveShadow?: boolean
+}
+const Text3D: React.FC<Text3DProps> = ({
+  text,
+  font,
+  size,
+  height,
+  curveSegments,
+  color,
+  position,
+  rotation,
+  bevelEnabled = false,
+  bevelThickness = 0.1,
+  bevelSize = 0.05,
+  bevelOffset = 0,
+  bevelSegments = 3,
+  animationLoop = true,
+  onClick,
+  onPointerOver,
+  onPointerOut,
+  castShadow = true,
+  receiveShadow = true
+}) => {
+  const textMeshRef = useRef<THREE.Mesh>(null)
+  const geometryRef = useRef<THREE.TextGeometry | null>(null)
+  const materialRef = useRef<THREE.MeshStandardMaterial | null>(null)
+  const [fontLoaded, setFontLoaded] = useState(false)
+  const [fontError, setFontError] = useState<Error | null>(null)
+  const fontInstance = useLoader(Font, font)
+  useEffect(() => {
+    if (fontInstance) {
+      setFontLoaded(true)
+    } else {
+      setFontError(new Error(`Failed to load font: ${font}`))
+    }
+    return () => {
+    }
+  }, [font, fontInstance])
+  useEffect(() => {
+    if (fontLoaded && fontInstance) {
+      if (geometryRef.current) {
+        geometryRef.current.dispose()
+      }
+      if (!text) return
+      geometryRef.current = new THREE.TextGeometry(text, {
+        font: fontInstance,
+        size: size,
+        height: height,
+        curveSegments: curveSegments,
+        bevelEnabled: bevelEnabled,
+        bevelThickness: bevelThickness,
+        bevelSize: bevelSize,
+        bevelOffset: bevelOffset,
+        bevelSegments: bevelSegments
+      })
+      geometryRef.current.computeBoundingBox()
+      geometryRef.current.center()
+    }
+    return () => {
+      if (geometryRef.current) {
+        geometryRef.current.dispose()
+        geometryRef.current = null
+      }
+    }
+  }, [
+    text,
+    fontLoaded,
+    fontInstance,
+    size,
+    height,
+    curveSegments,
+    bevelEnabled,
+    bevelThickness,
+    bevelSize,
+    bevelOffset,
+    bevelSegments
+  ])
+  useEffect(() => {
+    if (!materialRef.current) return
+    materialRef.current.color = new THREE.Color(color)
+    materialRef.current.needsUpdate = true
+  }, [color])
+  const handlePointerOver = useCallback(
+    (event: THREE.Intersection) => {
+      event.stopPropagation()
+      document.body.style.cursor = 'pointer'
+      if (onPointerOver) {
+        onPointerOver(event)
+      }
+    },
+    [onPointerOver]
+  )
+  const handlePointerOut = useCallback((event: THREE.Intersection) => {
+    event.stopPropagation()
+    document.body.style.cursor = 'auto'
+    if (onPointerOut) {
+      onPointerOut(event)
+    }
+  }, [onPointerOut])
+  const handleClick = useCallback(
+    (event: THREE.Intersection) => {
+      event.stopPropagation()
+      if (onClick) {
+        onClick(event)
+      }
+    },
+    [onClick]
+  )
+  if (fontError) {
+    console.error('Error loading font:', fontError)
+    return (
+      <mesh position={position} rotation={rotation}>
+        <boxGeometry args={[size, height, 0.1]} />
+        <meshBasicMaterial color="red" />
+      </mesh>
+    )
+  }
+  if (!fontLoaded || !geometryRef.current) {
+    return (
+      <mesh position={position} rotation={rotation}>
+        <boxGeometry args={[size, height, 0.1]} />
+        <meshStandardMaterial color="gray" transparent opacity={0.5} />
+      </mesh>
+    )
+  }
+  return (
+    <mesh
+      ref={textMeshRef}
+      position={new THREE.Vector3(position[0], position[1], position[2])}
+      rotation={new THREE.Euler(rotation[0], rotation[1], rotation[2])}
+      geometry={geometryRef.current}
+      material={
+        materialRef.current ||
+        (materialRef.current = new THREE.MeshStandardMaterial({ color: color, name: 'text3DMaterialDEFAULT' }))
+      }
+      castShadow={castShadow}
+      receiveShadow={receiveShadow}
+      onPointerOver={handlePointerOver}
+      onPointerOut={handlePointerOut}
+      onClick={handleClick}
+      frustumCulled={true}
+      name="text3DMesh"
+    />
+  )
+}
+export default Text3D
