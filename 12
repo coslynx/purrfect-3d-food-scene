@@ -1,0 +1,27 @@
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react'
+import * as THREE from 'three'
+import {useFrame, useThree} from '@react-three/fiber'
+import {useTheme} from '../hooks/useToggle'
+import {three3DHelpersUtil} from '../utils/three-helpers'
+import {Texture} from 'three'
+import {HookReturnType, ThreeDComponentProps} from '../types'
+import {useGLTF} from '@react-three/drei'
+
+interface ModelCustomizerProps{model:THREE.Object3D|undefined,texturePath?:string,color?:string,metalness?:number,roughness?:number}
+
+export const ModelCustomizer:React.FC<ModelCustomizerProps>=({model,texturePath,color,metalness,roughness})=>{const[selectedTexture,setSelectedTexture]=useState<Texture|null>(null)
+const[selectedColor,setSelectedColor]=useState<string|undefined>(color)
+const colorRef=useRef(new THREE.Color(color))
+const textureRef=useRef<THREE.Texture|null>(null)
+const{gl}=useThree()
+const{createTexture}=three3DHelpersUtil
+useEffect(()=>{if(color)setSelectedColor(color)},[color])
+useEffect(()=>{if(texturePath){const texture=createTexture(texturePath,()=>{})
+setSelectedTexture(texture)
+textureRef.current=texture}},[texturePath,createTexture])
+useFrame(()=>{if(model){model.traverse(child=>{if(child instanceof THREE.Mesh&&child.material instanceof THREE.MeshStandardMaterial){if(selectedColor&&colorRef.current?.getHexString()!==selectedColor){colorRef.current.set(selectedColor)
+child.material.color=colorRef.current
+child.material.emissive=colorRef.current
+child.material.needsUpdate=true}if(selectedTexture){child.material.map=selectedTexture
+child.material.needsUpdate=true}})}})})
+return null}
