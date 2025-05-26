@@ -1,0 +1,21 @@
+import { useState, useCallback } from 'react';
+
+type ToggleReturnType = [boolean, () => void];
+
+/**
+ * A hook to manage a simple boolean toggle state.
+ *
+ * @param {boolean} [initialValue=false] - The initial value of the toggle state.
+ * @returns {[boolean, () => void]} An array containing the current state and a function to toggle the state.
+ */
+const useToggle = (initialValue: boolean = false): ToggleReturnType => {
+  const [value, setValue] = useState<boolean>(initialValue);
+
+  const toggle = useCallback(() => {
+    setValue((prevValue) => !prevValue);
+  }, []);
+
+  return [value, toggle];
+};
+
+export default useToggle;
