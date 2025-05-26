@@ -1,0 +1,79 @@
+import { useState, useRef, useEffect, useCallback } from 'react';
+import * as THREE from 'three';
+import { useThree } from '@react-three/fiber';
+import { OrbitControls } from '@react-three/drei';
+
+export type ThreeDInteraction = {
+  enable: () => void;
+  disable: () => void;
+  setHovered: (object: THREE.Object3D | null) => void;
+  setSelected: (object: THREE.Object3D | null) => void;
+  hovered: THREE.Object3D | null;
+  selected: THREE.Object3D | null;
+};
+
+const use3DInteraction = (): ThreeDInteraction => {
+  const { scene, camera, gl } = useThree();
+  const [hovered, setHovered] = useState<THREE.Object3D | null>(null);
+  const [selected, setSelected] = useState<THREE.Object3D | null>(null);
+  const raycaster = useRef(new THREE.Raycaster()).current;
+  const pointer = useRef(new THREE.Vector2()).current;
+  const orbitControls = useRef<OrbitControls>(null);
+  const enabled = useRef(false);
+
+  const handleMouseMove = useCallback((event: MouseEvent) => {
+    if (!enabled.current) return;
+    const rect = gl.domElement.getBoundingClientRect();
+    pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(pointer, camera);
+    const intersects = raycaster.intersectObjects(scene.children, true);
+    if (intersects.length > 0) {
+      setHovered(intersects[0].object);
+      document.body.style.cursor = 'pointer';
+    } else {
+      setHovered(null);
+      document.body.style.cursor = 'auto';
+    }
+  }, [camera, gl.domElement, raycaster, scene]);
+
+  const handleClick = useCallback(() => {
+    if (hovered) {
+      setSelected(hovered);
+    } else {
+      setSelected(null);
+    }
+  }, [hovered]);
+
+  const enable = useCallback(() => {
+    enabled.current = true;
+    gl.domElement.addEventListener('mousemove', handleMouseMove);
+    gl.domElement.addEventListener('click', handleClick);
+  }, [gl.domElement, handleMouseMove, handleClick]);
+
+  const disable = useCallback(() => {
+    enabled.current = false;
+    gl.domElement.removeEventListener('mousemove', handleMouseMove);
+    gl.domElement.removeEventListener('click', handleClick);
+    setHovered(null);
+    setSelected(null);
+    document.body.style.cursor = 'default';
+  }, [gl.domElement, handleMouseMove, handleClick]);
+
+  useEffect(() => {
+    return () => {
+      disable();
+    };
+  }, [disable]);
+
+  return {
+    enable,
+    disable,
+    setHovered,
+    setSelected,
+    hovered,
+    selected,
+  };
+};
+
+export default use3DInteraction;
